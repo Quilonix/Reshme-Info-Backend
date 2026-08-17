@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "cf:secrets": "node scripts/sync-cloudflare-secrets.mjs",
+    "cf:deploy": "npx @cloudflare/next-on-pages && npx wrangler pages deploy .vercel/output/static --project-name=reshme-info-backend"
   },
   "dependencies": {
     "@google-analytics/data": "^7.0.0",
