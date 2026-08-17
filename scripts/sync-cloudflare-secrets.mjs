@@ -47,16 +47,24 @@ for (const line of lines) {
   if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
     val = val.slice(1, -1);
   }
-  if (secretsToSync.includes(key)) {
-    envMap.set(key, val);
-  }
+  envMap.set(key, val);
 }
 
-for (const [key, val] of envMap.entries()) {
+const cfToken = process.env.CLOUDFLARE_API_TOKEN || envMap.get('CLOUDFLARE_API_TOKEN');
+const cfAccount = process.env.CLOUDFLARE_ACCOUNT_ID || envMap.get('CLOUDFLARE_ACCOUNT_ID');
+
+for (const key of secretsToSync) {
+  const val = envMap.get(key);
+  if (!val) continue;
   try {
     process.stdout.write(`Uploading ${key}... `);
     execSync(`npx wrangler pages secret put ${key} --project-name=${projectName}`, {
       input: val,
+      env: {
+        ...process.env,
+        CLOUDFLARE_API_TOKEN: cfToken,
+        CLOUDFLARE_ACCOUNT_ID: cfAccount,
+      },
       stdio: ['pipe', 'ignore', 'pipe'],
     });
     console.log('OK');
