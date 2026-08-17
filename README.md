@@ -80,7 +80,37 @@ npm run build
 
 ---
 
-## Deployment (Vercel)
+## Deployment
+
+### Cloudflare Pages (Recommended)
+
+#### Option 1: Git Integration (Auto CI/CD)
+1. In Cloudflare Dashboard, go to **Compute (Workers & Pages)** > **Create application** > **Pages** > **Connect to Git**.
+2. Select **Quilonix/Reshme-Info-Backend**.
+3. Build Settings:
+   - **Framework preset**: `Next.js`
+   - **Build command**: `npx next-on-pages`
+   - **Build output directory**: `.vercel/output/static`
+   - **Compatibility flag**: `nodejs_compat`
+4. Click **Save and Deploy**.
+
+#### Option 2: CLI Deployment (Terminal / WSL)
+```bash
+# 1. Sync secrets to Cloudflare Pages
+npm run cf:secrets
+
+# 2. Build for Cloudflare Pages
+npx next-on-pages
+
+# 3. Deploy to Cloudflare Pages
+npx wrangler pages deploy .vercel/output/static --project-name=reshme-info-backend
+```
+
+> **Tip for Linux / WSL**: If you encounter an `ERESOLVE` peer dependency error, ensure `.npmrc` is present (`legacy-peer-deps=true`) or run `npm config set legacy-peer-deps true`.
+
+---
+
+### Vercel Deployment
 1. Push this repository to GitHub.
 2. Import repository into [Vercel](https://vercel.com).
 3. Set Environment Variables in Project Settings.
