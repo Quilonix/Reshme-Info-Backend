@@ -1,12 +1,12 @@
-# Reshme Info: Cloudflare Deployment & Architecture Guide
+# Reshme Info: Cloudflare Deployment & Runtime Architecture Guide
 
-Comprehensive documentation for deploying the **Reshme Info Admin Portal & Backend** (`admin-pwa`) to **Cloudflare Pages**.
+Comprehensive reference for deploying the **Reshme Info Admin Portal & Backend** (`admin-pwa`) to **Cloudflare Pages** and **Cloudflare Workers**.
 
 ---
 
-## 1. Prerequisites & Account Setup
+## 1. Cloudflare Environment & Account Reference
 
-- **Cloudflare Account**: `Mithungowda.b7411@gmail.com`
+- **Account**: `Mithungowda.b7411@gmail.com`
 - **Account ID**: `885e8227eb5c6d5be8f7bc48941c4ef4`
 - **Project Name**: `reshme-info-backend`
 - **Production URL**: `https://reshme-info-backend.pages.dev/`
@@ -14,65 +14,97 @@ Comprehensive documentation for deploying the **Reshme Info Admin Portal & Backe
 
 ---
 
-## 2. Resolving Peer Dependency (ERESOLVE) in WSL / Linux
+## 2. Next.js Runtime Architecture on Cloudflare
 
-When running `npx next-on-pages`, it invokes `vercel build` which triggers an internal `npm install` sub-process. Because Next.js 16 is newer than the default peer range expected by older tooling, npm may block with an `ERESOLVE` error.
+The Reshme Info backend utilizes:
+- **`firebase-admin`**: Requires standard Node.js crypto and networking primitives for Firebase Cloud Messaging (FCM) push dispatch.
+- **`@google-analytics/data`**: Utilizes Google APIs client libraries for live GA4 telemetry.
+- **`@supabase/supabase-js`**: PostgreSQL database client with Row Level Security (RLS).
 
-### The Fix:
-1. Ensure `.npmrc` exists in `admin-pwa/` with:
-   ```ini
-   legacy-peer-deps=true
-   ```
-2. Configure npm in your WSL/Linux environment:
-   ```bash
-   npm config set legacy-peer-deps true
-   ```
-3. Run the build command directly:
-   ```bash
-   npx next-on-pages
-   ```
+### Why Legacy `next-on-pages` Fails on Fullstack Apps:
+The older `@cloudflare/next-on-pages` CLI forces all API routes to run in pure V8 Edge isolates without full Node.js standard libraries (`node:crypto`), causing failures during bundle collection.
+
+### Recommended Approaches:
+1. **Cloudflare Pages Git Integration with `nodejs_compat`** (Recommended)
+2. **OpenNext for Cloudflare (`@opennextjs/cloudflare`)** (Modern CLI Standard)
+3. **Vercel Edge Deployment** (Alternative 1-Click Serverless)
 
 ---
 
-## 3. Deployment Methods
+## 3. Deployment Method 1: Cloudflare Pages Git Integration (Recommended)
 
-### Method A: Git Continuous Integration (Recommended)
-Every `git push` to `main` on `Quilonix/Reshme-Info-Backend` triggers a Cloudflare Pages deployment:
+This provides zero-maintenance automated CI/CD directly from GitHub:
 
-1. Open the [Cloudflare Dashboard](https://dash.cloudflare.com/).
+1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/).
 2. Navigate to **Compute (Workers & Pages)** > **Create application** > **Pages** > **Connect to Git**.
-3. Select repository: **Quilonix/Reshme-Info-Backend**.
-4. Set Build Configuration:
+3. Select repository: **`Quilonix/Reshme-Info-Backend`**.
+4. Configure Build Settings:
    - **Framework preset**: `Next.js`
-   - **Build command**: `npx next-on-pages`
-   - **Build output directory**: `.vercel/output/static`
-   - **Node.js compatibility flag**: `nodejs_compat`
-5. Click **Save and Deploy**.
+   - **Build command**: `npm run build`
+   - **Build output directory**: `.next`
+   - **Compatibility flag**: `nodejs_compat`
+   - **Compatibility date**: `2024-09-23`
+5. Verify Environment Variables in Settings (all production secrets are already synchronized).
+6. Click **Save and Deploy**.
 
 ---
 
-## 4. Deploy via Terminal (CLI)
+## 4. Deployment Method 2: OpenNext for Cloudflare (CLI)
 
-Run the build and deploy commands directly from `admin-pwa`:
+OpenNext packages standard Next.js App Router applications with full Node.js compatibility for Cloudflare Workers:
 
 ```bash
 cd /mnt/c/Projects/Reshme-Info/admin-pwa
 
-# 1. Build Next.js for Cloudflare Pages
-npx next-on-pages
+# Build using OpenNext adapter
+npx @opennextjs/cloudflare
 
-# 2. Deploy bundle to Cloudflare Pages
-npx wrangler pages deploy .vercel/output/static --project-name=reshme-info-backend
+# Deploy bundle using Wrangler
+npx wrangler pages deploy .worker-next --project-name=reshme-info-backend
 ```
 
 ---
 
-## 5. Environment Variables & Secrets Management
+## 5. Deployment Method 3: Vercel (1-Click Alternative)
 
-All production secrets have been synchronized to Cloudflare Pages via CLI.
+1. Open [Vercel](https://vercel.com).
+2. Click **Add New Project** and import **`Quilonix/Reshme-Info-Backend`**.
+3. Set the Environment Variables.
+4. Click **Deploy**.
 
-To re-sync anytime you modify `admin-pwa/.env.local`:
+---
+
+## 6. Environment Variables & Secrets Reference
+
+All production secrets are already configured in Cloudflare Pages.
+
+To re-sync secrets anytime you update `admin-pwa/.env.local`:
 ```bash
 cd C:\Projects\Reshme-Info\admin-pwa
 npm run cf:secrets
 ```
+
+### Configured Secrets in Cloudflare Pages:
+| Secret Key | Category | Description |
+| :--- | :--- | :--- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase | REST & Realtime API Endpoint |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase | Client-safe anonymous API token |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase | Elevated server-side admin token |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | Google Analytics | GA4 Web stream measurement ID |
+| `GA_PROPERTY_ID` | Google Analytics | Numeric GA4 property identifier |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | Firebase | Full Service Account JSON for FCM |
+| `GEMINI_API_KEY` | Google Gemini | AI OCR rate extraction key |
+| `UPSTASH_REDIS_REST_URL` | Upstash Redis | Serverless Redis REST endpoint |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis | Serverless Redis REST auth token |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare | Wrangler CLI authorization token |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare | Cloudflare account identifier |
+
+---
+
+## 7. Custom Domain & SSL Setup
+
+To map your custom domain (e.g. `quilonix.in` or `admin.reshmeinfo.com`):
+1. In Cloudflare Pages, select **reshme-info-backend** > **Custom domains**.
+2. Click **Set up a custom domain**.
+3. Enter your domain and click **Continue**.
+4. Cloudflare automatically configures DNS records and provisions free SSL/TLS certificates.
