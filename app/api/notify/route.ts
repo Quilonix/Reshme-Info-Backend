@@ -125,47 +125,36 @@ export async function POST(request: NextRequest) {
     if (firebaseApp) {
       const messaging = getMessaging(firebaseApp);
 
-      // A. Send to Topic broadcast (reaches ALL subscribed app devices)
+      // A. Send to universal 'all' Topic broadcast (reaches 100% of all app users without market filters)
       try {
-        const topicsToBroadcast = ['all'];
-        if (targetMarket && targetMarket !== 'all') {
-          topicsToBroadcast.push(`market_${targetMarket.replace(/\s+/g, '_')}`);
-        }
-
-        for (const topicName of topicsToBroadcast) {
-          try {
-            await messaging.send({
-              topic: topicName,
-              notification: {
-                title,
-                body: notificationMessage,
-                imageUrl: imageUrl || undefined,
-              },
-              android: {
-                priority: 'high',
-                notification: {
-                  channelId: 'reshme_channel',
-                  sound: 'default',
-                  priority: 'high',
-                  defaultSound: true,
-                  defaultVibrateTimings: true,
-                },
-              },
-              data: {
-                priority,
-                targetAudience,
-                targetMarket: targetMarket || '',
-                notificationId: record?.id || '',
-                click_action: 'FLUTTER_NOTIFICATION_CLICK',
-              },
-            });
-            topicSent = true;
-          } catch (tErr) {
-            console.warn(`Topic ${topicName} broadcast note:`, tErr);
-          }
-        }
+        await messaging.send({
+          topic: 'all',
+          notification: {
+            title,
+            body: notificationMessage,
+            imageUrl: imageUrl || undefined,
+          },
+          android: {
+            priority: 'high',
+            notification: {
+              channelId: 'reshme_channel',
+              sound: 'default',
+              priority: 'high',
+              defaultSound: true,
+              defaultVibrateTimings: true,
+            },
+          },
+          data: {
+            priority,
+            targetAudience: 'all',
+            targetMarket: targetMarket || '',
+            notificationId: record?.id || '',
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          },
+        });
+        topicSent = true;
       } catch (topicErr) {
-        console.warn('Topic broadcast note:', topicErr);
+        console.warn('Universal topic broadcast note:', topicErr);
       }
 
       // B. Send direct multicast to registered device tokens
