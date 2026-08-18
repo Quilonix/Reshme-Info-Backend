@@ -10,7 +10,7 @@ Karnataka Silk Cocoon Real-Time Auction Intelligence Platform & Administrative B
 - **Telemetry & Live Analytics**: Google Analytics Data API (`@google-analytics/data`)
 - **Push Notifications**: Firebase Cloud Messaging (FCM HTTP v1 API)
 - **AI OCR Price Extraction**: Google Gemini API
-- **Deployment**: Vercel / Node.js Engine
+- **Deployment Platform**: Vercel Global Edge
 
 ---
 
@@ -45,6 +45,7 @@ admin-pwa/
 ## Environment Setup
 Create `.env.local` in `admin-pwa/`:
 ```env
+# Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
@@ -52,26 +53,26 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 # Google Analytics 4 (Data API)
 NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
 GA_PROPERTY_ID=your-ga-property-id
-GOOGLE_SERVICE_ACCOUNT_EMAIL=your-sa@project.iam.gserviceaccount.com
-GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 
 # Firebase Cloud Messaging
-FIREBASE_PROJECT_ID=reshme-info
-FIREBASE_CLIENT_EMAIL=your-firebase-sa@reshme-info.iam.gserviceaccount.com
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+FIREBASE_SERVICE_ACCOUNT_KEY={"type":"service_account","project_id":"reshme-info",...}
 
-# Google Gemini API
+# Google Gemini AI OCR
 GEMINI_API_KEY=your-gemini-key
+
+# Upstash Redis Hybrid Cache (Optional)
+UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your-token
 ```
 
 ---
 
-## Getting Started
+## Local Development
 ```bash
 # 1. Install dependencies
 npm install
 
-# 2. Start local development server
+# 2. Start development server
 npm run dev
 
 # 3. Build for production
@@ -80,38 +81,18 @@ npm run build
 
 ---
 
-## Deployment
+## Deployment (Vercel)
 
-### Cloudflare Pages (Recommended)
-
-#### Option 1: Git Integration (Auto CI/CD)
-1. In Cloudflare Dashboard, go to **Compute (Workers & Pages)** > **Create application** > **Pages** > **Connect to Git**.
-2. Select **Quilonix/Reshme-Info-Backend**.
-3. Build Settings:
-   - **Framework preset**: `Next.js`
-   - **Build command**: `npx next-on-pages`
-   - **Build output directory**: `.vercel/output/static`
-   - **Compatibility flag**: `nodejs_compat`
-4. Click **Save and Deploy**.
-
-#### Option 2: CLI Deployment (Terminal / WSL)
-```bash
-# 1. Sync secrets to Cloudflare Pages
-npm run cf:secrets
-
-# 2. Build for Cloudflare Pages
-npx next-on-pages
-
-# 3. Deploy to Cloudflare Pages
-npx wrangler pages deploy .vercel/output/static --project-name=reshme-info-backend
-```
-
-> **Tip for Linux / WSL**: If you encounter an `ERESOLVE` peer dependency error, ensure `.npmrc` is present (`legacy-peer-deps=true`) or run `npm config set legacy-peer-deps true`.
-
----
-
-### Vercel Deployment
-1. Push this repository to GitHub.
-2. Import repository into [Vercel](https://vercel.com).
-3. Set Environment Variables in Project Settings.
-4. Deploy.
+1. Go to [Vercel Dashboard](https://vercel.com).
+2. Click **Add New Project** and select **`Quilonix/Reshme-Info-Backend`**.
+3. In **Environment Variables**, paste the keys from your `.env.local`:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `NEXT_PUBLIC_GA_MEASUREMENT_ID`
+   - `GA_PROPERTY_ID`
+   - `FIREBASE_SERVICE_ACCOUNT_KEY`
+   - `GEMINI_API_KEY`
+   - `UPSTASH_REDIS_REST_URL`
+   - `UPSTASH_REDIS_REST_TOKEN`
+4. Click **Deploy**.

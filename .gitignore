@@ -6,6 +6,8 @@
 # Next.js Build Output
 /.next/
 /out/
+/.vercel/
+/.open-next/
 
 # Production Build
 /build
