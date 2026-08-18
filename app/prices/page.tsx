@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { trackEvent, trackPageView } from '@/lib/analytics';
-import { Check, AlertCircle, Save, Trash2, Calendar, Database, AlertTriangle, Clock, Filter } from 'lucide-react';
+import { Check, AlertCircle, Save, Trash2, Calendar, Database, Clock } from 'lucide-react';
 
 export default function PriceEntryPage() {
   const router = useRouter();
@@ -102,7 +102,7 @@ export default function PriceEntryPage() {
       query.eq('report_date', targetDate);
     }
 
-    const { data, error } = await query.limit(50);
+    const { data } = await query.limit(50);
     if (data) {
       setPricesForDate(data);
     }
@@ -177,8 +177,7 @@ export default function PriceEntryPage() {
         created_by: user?.id,
       };
 
-      const { data, error } = await supabase.from('cocoon_prices').insert([payload]).select();
-
+      const { error } = await supabase.from('cocoon_prices').insert([payload]);
       if (error) throw error;
 
       trackEvent('price_entry_submitted', {
@@ -241,7 +240,7 @@ export default function PriceEntryPage() {
     setSuccessMsg('');
 
     try {
-      const { data, error, count } = await supabase
+      const { error } = await supabase
         .from('cocoon_prices')
         .delete()
         .lt('report_date', cutoffDateStr);
@@ -276,125 +275,118 @@ export default function PriceEntryPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
-      {/* Page Title & 7-Day Cleaner Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+    <div style={{ maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
+      {/* Page Header */}
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Daily APMC Auction Rate Entry</h1>
-          <p className="text-sm font-medium text-slate-500 mt-1">
-            Publish official sericulture auction results with instant farmer push broadcasting.
-          </p>
+          <h1 className="page-title">Daily APMC Auction Rate Entry</h1>
+          <p className="page-subtitle">Publish official sericulture auction results with instant farmer push broadcasting.</p>
         </div>
 
         {isSuperAdmin && (
           <button
             onClick={handlePurgeOldPrices}
             disabled={purging}
-            className="flex items-center justify-center space-x-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-4 py-2.5 rounded-xl text-xs font-bold transition duration-150 disabled:opacity-50 shadow-sm"
+            className="btn btn-danger"
+            style={{ fontSize: '0.82rem', padding: '8px 16px', minHeight: '40px' }}
           >
-            <Database className="w-4 h-4 text-rose-600" />
-            <span>{purging ? 'Purging records...' : 'Purge Records > 7 Days'}</span>
+            <Database style={{ width: '16px', height: '16px' }} />
+            <span>{purging ? 'Purging...' : 'Purge Records > 7 Days'}</span>
           </button>
         )}
       </div>
 
-      {/* Date-Wise Viewing & Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
-            <Calendar className="w-4 h-4 text-blue-600" />
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Date-Wise View:</span>
+      {/* Date-Wise Selector Bar */}
+      <div className="card" style={{ marginBottom: '20px', padding: '16px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Calendar style={{ width: '18px', height: '18px', color: 'var(--primary)' }} />
+            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Date-Wise View:
+            </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <button
               onClick={() => handleDateTabChange(todayStr)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                selectedViewDate === todayStr
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+              className={selectedViewDate === todayStr ? 'btn btn-primary' : 'btn btn-secondary'}
+              style={{ fontSize: '0.82rem', padding: '6px 14px', minHeight: '36px', borderRadius: '10px' }}
             >
               Today ({todayStr})
             </button>
 
             <button
               onClick={() => handleDateTabChange(yesterdayStr)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                selectedViewDate === yesterdayStr
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+              className={selectedViewDate === yesterdayStr ? 'btn btn-primary' : 'btn btn-secondary'}
+              style={{ fontSize: '0.82rem', padding: '6px 14px', minHeight: '36px', borderRadius: '10px' }}
             >
               Yesterday ({yesterdayStr})
             </button>
 
             <button
               onClick={() => handleDateTabChange(dayBeforeStr)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                selectedViewDate === dayBeforeStr
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+              className={selectedViewDate === dayBeforeStr ? 'btn btn-primary' : 'btn btn-secondary'}
+              style={{ fontSize: '0.82rem', padding: '6px 14px', minHeight: '36px', borderRadius: '10px' }}
             >
               Day Before ({dayBeforeStr})
             </button>
 
             <button
               onClick={() => handleDateTabChange('all')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                selectedViewDate === 'all'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+              className={selectedViewDate === 'all' ? 'btn btn-primary' : 'btn btn-secondary'}
+              style={{ fontSize: '0.82rem', padding: '6px 14px', minHeight: '36px', borderRadius: '10px' }}
             >
               All Dates
             </button>
 
             {/* Custom Date Input */}
-            <div className="flex items-center space-x-1 pl-2 border-l border-slate-200">
+            <div style={{ display: 'flex', alignItems: 'center', paddingLeft: '8px', borderLeft: '1px solid var(--border)' }}>
               <input
                 type="date"
                 value={selectedViewDate !== 'all' ? selectedViewDate : ''}
                 onChange={(e) => {
                   if (e.target.value) handleDateTabChange(e.target.value);
                 }}
-                className="px-2 py-1 text-xs border border-slate-300 rounded-lg bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="form-input"
+                style={{ padding: '6px 10px', fontSize: '0.82rem', borderRadius: '8px', minHeight: '36px', width: 'auto' }}
               />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Status Messages */}
+      {/* Success / Error Alerts */}
       {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center space-x-3 text-sm font-semibold">
-          <Check className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+        <div className="alert-box alert-success" style={{ marginBottom: '20px', padding: '14px 18px', background: 'var(--success-light)', border: '1px solid #bbf7d0', borderRadius: '12px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600 }}>
+          <Check style={{ width: '20px', height: '20px', flexShrink: 0 }} />
           <span>{successMsg}</span>
         </div>
       )}
 
       {errorMsg && (
-        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl flex items-center space-x-3 text-sm font-semibold">
-          <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+        <div className="alert-box alert-error" style={{ marginBottom: '20px', padding: '14px 18px', background: 'var(--danger-light)', border: '1px solid #fecaca', borderRadius: '12px', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600 }}>
+          <AlertCircle style={{ width: '20px', height: '20px', flexShrink: 0 }} />
           <span>{errorMsg}</span>
         </div>
       )}
 
-      {/* Main Entry Form */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Market Selection */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                APMC Market Name *
-              </label>
+      {/* Main Entry Form Card */}
+      <div className="card" style={{ marginBottom: '24px', padding: '24px' }}>
+        <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+          <Save style={{ width: '20px', height: '20px', color: 'var(--primary)' }} />
+          Publish Auction Rate for {formData.report_date}
+        </h2>
+
+        <form onSubmit={handleSubmit}>
+          {/* Row 1: Market, Breed, Quality */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px', marginBottom: '20px' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">APMC Market Name *</label>
               <select
                 value={formData.market_name}
                 onChange={(e) => setFormData({ ...formData, market_name: e.target.value })}
                 required
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="form-select"
               >
                 {markets.map((m) => (
                   <option key={m.id} value={m.name}>
@@ -404,16 +396,13 @@ export default function PriceEntryPage() {
               </select>
             </div>
 
-            {/* Breed Selection */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Silk Breed Code *
-              </label>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Silk Breed Code *</label>
               <select
                 value={formData.breed}
                 onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
                 required
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="form-select"
               >
                 {breeds.length > 0 ? (
                   breeds.map((b) => (
@@ -431,15 +420,12 @@ export default function PriceEntryPage() {
               </select>
             </div>
 
-            {/* Quality Grade */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Quality Grade
-              </label>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Quality Grade</label>
               <select
                 value={formData.quality}
                 onChange={(e) => setFormData({ ...formData, quality: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="form-select"
               >
                 <option value="A">Grade A (Premium)</option>
                 <option value="B">Grade B (Standard)</option>
@@ -448,12 +434,10 @@ export default function PriceEntryPage() {
             </div>
           </div>
 
-          {/* Pricing Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-5 rounded-xl border border-slate-100">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Minimum Price (₹/kg) *
-              </label>
+          {/* Row 2: Price Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '18px', padding: '18px', background: 'var(--background)', borderRadius: '14px', border: '1px solid var(--border)', marginBottom: '20px' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Minimum Price (₹/kg) *</label>
               <input
                 type="number"
                 step="0.01"
@@ -461,14 +445,13 @@ export default function PriceEntryPage() {
                 placeholder="e.g. 520"
                 value={formData.min_price}
                 onChange={(e) => handlePriceChange('min_price', e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="form-input"
+                style={{ fontWeight: 800 }}
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Maximum Price (₹/kg) *
-              </label>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Maximum Price (₹/kg) *</label>
               <input
                 type="number"
                 step="0.01"
@@ -476,14 +459,13 @@ export default function PriceEntryPage() {
                 placeholder="e.g. 780"
                 value={formData.max_price}
                 onChange={(e) => handlePriceChange('max_price', e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="form-input"
+                style={{ fontWeight: 800 }}
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Average Price (₹/kg) *
-              </label>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Average Price (₹/kg) *</label>
               <input
                 type="number"
                 step="0.01"
@@ -491,136 +473,134 @@ export default function PriceEntryPage() {
                 placeholder="Calculated automatically"
                 value={formData.avg_price}
                 onChange={(e) => setFormData({ ...formData, avg_price: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900 font-black text-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+                className="form-input"
+                style={{ fontWeight: 900, color: 'var(--success)', background: '#f0fdf4', borderColor: '#86efac' }}
               />
             </div>
           </div>
 
-          {/* Volume & Date Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Lot Number / Count
-              </label>
+          {/* Row 3: Lots, Weight, Date */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '18px', marginBottom: '20px' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Lot Count / Number</label>
               <input
                 type="number"
                 placeholder="e.g. 145"
                 value={formData.lot_number}
                 onChange={(e) => setFormData({ ...formData, lot_number: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="form-input"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Total Weight (Kg)
-              </label>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Total Weight (Kg)</label>
               <input
                 type="number"
                 step="0.01"
                 placeholder="e.g. 1250.5"
                 value={formData.total_weight}
                 onChange={(e) => setFormData({ ...formData, total_weight: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="form-input"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Report Date *
-              </label>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Report Date *</label>
               <input
                 type="date"
                 required
                 value={formData.report_date}
                 onChange={(e) => setFormData({ ...formData, report_date: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="form-input"
+                style={{ fontWeight: 700 }}
               />
             </div>
           </div>
 
-          {/* Push Broadcast Toggle */}
-          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+          {/* Push Broadcast Checkbox */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', background: 'var(--background)', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '24px' }}>
             <div>
-              <p className="text-sm font-bold text-slate-900">Broadcast Push Notification to Farmers</p>
-              <p className="text-xs text-slate-500">Send an instant alert to farmers subscribed to this APMC market.</p>
+              <p style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--text-main)', margin: 0 }}>Broadcast Push Notification to Farmers</p>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>Send an instant alert to farmers subscribed to this APMC market.</p>
             </div>
             <input
               type="checkbox"
               checked={sendNotification}
               onChange={(e) => setSendNotification(e.target.checked)}
-              className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+              style={{ width: '20px', height: '20px', cursor: 'pointer', accentColor: 'var(--primary)' }}
             />
           </div>
 
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm uppercase tracking-wider rounded-xl transition duration-150 flex items-center justify-center space-x-2 shadow-sm disabled:opacity-50"
+            className="btn btn-primary"
+            style={{ width: '100%', padding: '16px', fontSize: '1rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em' }}
           >
-            <Save className="w-5 h-5" />
+            <Save style={{ width: '20px', height: '20px' }} />
             <span>{loading ? 'Saving Auction Price...' : 'Publish Rate Entry'}</span>
           </button>
         </form>
       </div>
 
-      {/* Date-Wise Price Records Table */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-2">
-            <Clock className="w-4 h-4 text-slate-500" />
-            <h2 className="text-base font-bold text-slate-900">
+      {/* Date-Wise Records Table Card */}
+      <div className="card" style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Clock style={{ width: '18px', height: '18px', color: 'var(--text-muted)' }} />
+            <h2 className="card-title" style={{ margin: 0 }}>
               Auction Records for: {selectedViewDate === 'all' ? 'All Dates' : selectedViewDate}
             </h2>
           </div>
-          <span className="text-xs font-bold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg">
-            {pricesForDate.length} entries
+          <span style={{ fontSize: '0.78rem', fontWeight: 800, padding: '4px 10px', background: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '8px' }}>
+            {pricesForDate.length} entries recorded
           </span>
         </div>
 
         {pricesForDate.length === 0 ? (
-          <div className="text-center py-10 text-slate-400 font-medium text-sm">
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)', fontSize: '0.92rem' }}>
             No auction rate entries recorded for {selectedViewDate}.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse">
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50 text-xs uppercase font-bold text-slate-500">
-                  <th className="py-3 px-4">Market</th>
-                  <th className="py-3 px-4">Breed</th>
-                  <th className="py-3 px-4">Grade</th>
-                  <th className="py-3 px-4">Min (₹)</th>
-                  <th className="py-3 px-4">Max (₹)</th>
-                  <th className="py-3 px-4">Avg (₹/kg)</th>
-                  <th className="py-3 px-4">Lots</th>
-                  <th className="py-3 px-4">Date</th>
-                  {isSuperAdmin && <th className="py-3 px-4 text-right">Actions</th>}
+                <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--background)', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 800 }}>
+                  <th style={{ padding: '12px 14px' }}>Market</th>
+                  <th style={{ padding: '12px 14px' }}>Breed</th>
+                  <th style={{ padding: '12px 14px' }}>Grade</th>
+                  <th style={{ padding: '12px 14px' }}>Min (₹)</th>
+                  <th style={{ padding: '12px 14px' }}>Max (₹)</th>
+                  <th style={{ padding: '12px 14px' }}>Avg (₹/kg)</th>
+                  <th style={{ padding: '12px 14px' }}>Lots</th>
+                  <th style={{ padding: '12px 14px' }}>Date</th>
+                  {isSuperAdmin && <th style={{ padding: '12px 14px', textAlign: 'right' }}>Actions</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+              <tbody style={{ fontWeight: 600, color: 'var(--text-main)' }}>
                 {pricesForDate.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50 transition">
-                    <td className="py-3 px-4 font-bold text-slate-900">{item.market_name}</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-bold text-xs">
+                  <tr key={item.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '12px 14px', fontWeight: 800 }}>{item.market_name}</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <span style={{ padding: '3px 8px', background: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 800 }}>
                         {item.breed}
                       </span>
                     </td>
-                    <td className="py-3 px-4">{item.quality || 'A'}</td>
-                    <td className="py-3 px-4">₹{item.min_price}</td>
-                    <td className="py-3 px-4">₹{item.max_price}</td>
-                    <td className="py-3 px-4 font-bold text-emerald-600">₹{item.avg_price}</td>
-                    <td className="py-3 px-4 text-slate-500">{item.lot_number || '-'}</td>
-                    <td className="py-3 px-4 text-slate-500 text-xs">{item.report_date}</td>
+                    <td style={{ padding: '12px 14px' }}>{item.quality || 'A'}</td>
+                    <td style={{ padding: '12px 14px' }}>₹{item.min_price}</td>
+                    <td style={{ padding: '12px 14px' }}>₹{item.max_price}</td>
+                    <td style={{ padding: '12px 14px', fontWeight: 900, color: 'var(--success)', fontSize: '0.98rem' }}>₹{item.avg_price}</td>
+                    <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{item.lot_number || '-'}</td>
+                    <td style={{ padding: '12px 14px', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{item.report_date}</td>
                     {isSuperAdmin && (
-                      <td className="py-3 px-4 text-right">
+                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                         <button
                           onClick={() => handleDeletePrice(item.id, item.market_name, item.report_date)}
-                          className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '6px', borderRadius: '6px' }}
                           title="Delete entry"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 style={{ width: '16px', height: '16px' }} />
                         </button>
                       </td>
                     )}
