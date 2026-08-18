@@ -5,19 +5,36 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { trackEvent, trackPageView } from '@/lib/analytics';
-import { Check, AlertCircle, Save, Trash2, Calendar, Database, AlertTriangle } from 'lucide-react';
+import { Check, AlertCircle, Save, Trash2, Calendar, Database, AlertTriangle, Clock, Filter } from 'lucide-react';
 
 export default function PriceEntryPage() {
   const router = useRouter();
   const { user, profile, loading: authLoading } = useAuth();
   const [markets, setMarkets] = useState<any[]>([]);
   const [breeds, setBreeds] = useState<any[]>([]);
-  const [recentPrices, setRecentPrices] = useState<any[]>([]);
+  const [pricesForDate, setPricesForDate] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [purging, setPurging] = useState(false);
   const [sendNotification, setSendNotification] = useState(true);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Format today, yesterday, day before
+  const formatDate = (dt: Date) => {
+    return dt.toISOString().split('T')[0];
+  };
+
+  const todayStr = formatDate(new Date());
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterdayStr = formatDate(yesterdayDate);
+
+  const dayBeforeDate = new Date();
+  dayBeforeDate.setDate(dayBeforeDate.getDate() - 2);
+  const dayBeforeStr = formatDate(dayBeforeDate);
+
+  // Active viewing date (default locked to today)
+  const [selectedViewDate, setSelectedViewDate] = useState<string>(todayStr);
 
   // 7 Days Cutoff calculation
   const cutoffDateObj = new Date();
@@ -33,7 +50,7 @@ export default function PriceEntryPage() {
     avg_price: '',
     lot_number: '',
     total_weight: '',
-    report_date: new Date().toISOString().split('T')[0],
+    report_date: todayStr,
   });
 
   const isSuperAdmin = profile?.role === 'super_admin';
@@ -72,23 +89,41 @@ export default function PriceEntryPage() {
     if (breedData && breedData.length > 0) {
       setBreeds(breedData);
     }
+  };
 
-    // 3. Fetch recent prices
-    const { data: pricesData } = await supabase
+  // Fetch prices filtered by the selected view date
+  const fetchPricesForDate = async (targetDate: string) => {
+    const query = supabase
       .from('cocoon_prices')
       .select('*')
-      .order('report_date', { ascending: false })
-      .limit(20);
+      .order('avg_price', { ascending: false });
 
-    if (pricesData) {
-      setRecentPrices(pricesData);
+    if (targetDate !== 'all') {
+      query.eq('report_date', targetDate);
+    }
+
+    const { data, error } = await query.limit(50);
+    if (data) {
+      setPricesForDate(data);
     }
   };
 
   useEffect(() => {
     trackPageView('/prices', 'Price Entry Form');
     fetchDropdownData();
+    fetchPricesForDate(selectedViewDate);
   }, [profile]);
+
+  useEffect(() => {
+    fetchPricesForDate(selectedViewDate);
+  }, [selectedViewDate]);
+
+  const handleDateTabChange = (newDate: string) => {
+    setSelectedViewDate(newDate);
+    if (newDate !== 'all') {
+      setFormData((prev) => ({ ...prev, report_date: newDate }));
+    }
+  };
 
   const handlePriceChange = (field: 'min_price' | 'max_price', value: string) => {
     const nextFormData = { ...formData, [field]: value };
@@ -104,64 +139,77 @@ export default function PriceEntryPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSuccessMsg('');
-    setErrorMsg('');
-
-    const min = parseFloat(formData.min_price);
-    const max = parseFloat(formData.max_price);
-    const avg = parseFloat(formData.avg_price);
-
-    if (isNaN(min) || isNaN(max) || isNaN(avg)) {
-      setErrorMsg('Please enter valid minimum and maximum prices.');
-      return;
-    }
-
-    if (max < min) {
-      setErrorMsg('Maximum price must be greater than or equal to minimum price.');
-      return;
-    }
-
     setLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
     try {
-      const { error } = await supabase.from('cocoon_prices').insert({
+      const min = parseFloat(formData.min_price);
+      const max = parseFloat(formData.max_price);
+      const avg = parseFloat(formData.avg_price);
+
+      if (isNaN(min) || isNaN(max) || isNaN(avg)) {
+        throw new Error('Please enter valid numeric price values.');
+      }
+      if (max < min) {
+        throw new Error('Maximum price cannot be lower than minimum price.');
+      }
+
+      // Check market permission
+      if (
+        profile?.role === 'market_admin' &&
+        profile.assigned_market !== 'all' &&
+        profile.assigned_market !== formData.market_name
+      ) {
+        throw new Error(`You are only permitted to enter prices for ${profile.assigned_market}.`);
+      }
+
+      const payload = {
         market_name: formData.market_name,
-        breed: formData.breed as any,
-        quality: formData.quality as any,
+        breed: formData.breed,
+        quality: formData.quality,
         min_price: min,
         max_price: max,
         avg_price: avg,
-        price_per_kg: avg,
         lot_number: formData.lot_number ? parseInt(formData.lot_number) : null,
         total_weight: formData.total_weight ? parseFloat(formData.total_weight) : null,
         report_date: formData.report_date,
-      });
+        created_by: user?.id,
+      };
+
+      const { data, error } = await supabase.from('cocoon_prices').insert([payload]).select();
 
       if (error) throw error;
 
-      trackEvent('price_entry_created', {
+      trackEvent('price_entry_submitted', {
         market: formData.market_name,
         breed: formData.breed,
         avgPrice: avg,
+        date: formData.report_date,
       });
 
-      // Automatically dispatch Push Notification if enabled
+      // Send Push Notification Broadcast if enabled
       if (sendNotification) {
         try {
           await fetch('/api/notify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              title: `${formData.market_name} Market Price Update`,
-              message: `${formData.breed} Cocoon: Avg Rs ${avg}/kg (Min: Rs ${min}, Max: Rs ${max}) on ${formData.report_date}`,
-              priority: 'high',
-              targetAudience: 'all',
+              title: `Live Silk Rate: ${formData.market_name}`,
+              body: `${formData.breed} Silk Cocoon Average: ₹${avg}/kg (Min: ₹${min}, Max: ₹${max}) on ${formData.report_date}`,
               targetMarket: formData.market_name,
+              priority: 'high',
             }),
           });
-        } catch (_) {}
+        } catch (notifErr) {
+          console.warn('Push notification delivery note:', notifErr);
+        }
       }
 
-      setSuccessMsg(`Successfully saved price entry and dispatched push alert for ${formData.market_name} (${formData.breed})`);
+      setSuccessMsg(`Market auction rate for ${formData.market_name} on ${formData.report_date} successfully saved.`);
+      fetchPricesForDate(selectedViewDate);
+
+      // Reset form but retain market & date
       setFormData((prev) => ({
         ...prev,
         min_price: '',
@@ -170,126 +218,183 @@ export default function PriceEntryPage() {
         lot_number: '',
         total_weight: '',
       }));
-      fetchDropdownData();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to submit price');
+      setErrorMsg(err.message || 'Failed to submit price entry.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 7-Day Data Purge Handler
-  const handlePurgeOldRecords = async () => {
+  const handlePurgeOldPrices = async () => {
     if (!isSuperAdmin) {
-      setErrorMsg('Only Super Admins can purge historical market data.');
+      alert('Only Super Administrators are permitted to purge old auction records.');
       return;
     }
 
-    const confirmed = confirm(
-      `Are you sure you want to permanently delete all market auction prices recorded before ${cutoffDateStr} (older than 7 days)? This action cannot be undone.`
+    const confirmPurge = window.confirm(
+      `Are you sure you want to permanently delete all price records older than 7 days (before ${cutoffDateStr})? This action cannot be undone.`
     );
-    if (!confirmed) return;
+    if (!confirmPurge) return;
 
     setPurging(true);
-    setSuccessMsg('');
     setErrorMsg('');
+    setSuccessMsg('');
 
     try {
-      const { error, count } = await supabase
+      const { data, error, count } = await supabase
         .from('cocoon_prices')
-        .delete({ count: 'exact' })
+        .delete()
         .lt('report_date', cutoffDateStr);
 
       if (error) throw error;
 
-      trackEvent('market_data_purged', { cutoffDate: cutoffDateStr, deletedCount: count });
-      setSuccessMsg(`Successfully purged previous market data recorded before ${cutoffDateStr}. Preserved past 7 days.`);
-      fetchDropdownData();
+      trackEvent('prices_purged_7days', { cutoffDate: cutoffDateStr });
+      setSuccessMsg(`All price records older than 7 days (before ${cutoffDateStr}) have been purged.`);
+      fetchPricesForDate(selectedViewDate);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to purge old market records.');
+      setErrorMsg(err.message || 'Failed to purge old price records.');
     } finally {
       setPurging(false);
     }
   };
 
-  const handleDeleteSingle = async (id: string, market: string, date: string) => {
-    if (!isSuperAdmin) return;
-    if (!confirm(`Delete rate record for ${market} on ${date}?`)) return;
+  const handleDeletePrice = async (id: string, market: string, date: string) => {
+    if (!isSuperAdmin) {
+      alert('Only Super Administrators are permitted to delete auction entries.');
+      return;
+    }
+    if (!confirm(`Delete price record for ${market} on ${date}?`)) return;
 
     try {
       const { error } = await supabase.from('cocoon_prices').delete().eq('id', id);
       if (error) throw error;
-      setSuccessMsg(`Record deleted.`);
-      fetchDropdownData();
+      setSuccessMsg('Price record deleted successfully.');
+      fetchPricesForDate(selectedViewDate);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to delete record.');
     }
   };
 
-  if (authLoading || !user) return null;
-
   return (
-    <div style={{ maxWidth: '900px' }}>
-      <div className="page-header">
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+      {/* Page Title & 7-Day Cleaner Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="page-title">Cocoon Price Entry & Data Management</h1>
-          <p className="page-subtitle">Submit daily auction rates and manage historical retention</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Daily APMC Auction Rate Entry</h1>
+          <p className="text-sm font-medium text-slate-500 mt-1">
+            Publish official sericulture auction results with instant farmer push broadcasting.
+          </p>
+        </div>
+
+        {isSuperAdmin && (
+          <button
+            onClick={handlePurgeOldPrices}
+            disabled={purging}
+            className="flex items-center justify-center space-x-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-4 py-2.5 rounded-xl text-xs font-bold transition duration-150 disabled:opacity-50 shadow-sm"
+          >
+            <Database className="w-4 h-4 text-rose-600" />
+            <span>{purging ? 'Purging records...' : 'Purge Records > 7 Days'}</span>
+          </button>
+        )}
+      </div>
+
+      {/* Date-Wise Viewing & Filter Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center space-x-2">
+            <Calendar className="w-4 h-4 text-blue-600" />
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Date-Wise View:</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => handleDateTabChange(todayStr)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                selectedViewDate === todayStr
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Today ({todayStr})
+            </button>
+
+            <button
+              onClick={() => handleDateTabChange(yesterdayStr)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                selectedViewDate === yesterdayStr
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Yesterday ({yesterdayStr})
+            </button>
+
+            <button
+              onClick={() => handleDateTabChange(dayBeforeStr)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                selectedViewDate === dayBeforeStr
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Day Before ({dayBeforeStr})
+            </button>
+
+            <button
+              onClick={() => handleDateTabChange('all')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                selectedViewDate === 'all'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              All Dates
+            </button>
+
+            {/* Custom Date Input */}
+            <div className="flex items-center space-x-1 pl-2 border-l border-slate-200">
+              <input
+                type="date"
+                value={selectedViewDate !== 'all' ? selectedViewDate : ''}
+                onChange={(e) => {
+                  if (e.target.value) handleDateTabChange(e.target.value);
+                }}
+                className="px-2 py-1 text-xs border border-slate-300 rounded-lg bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Status Messages */}
       {successMsg && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: '#16a34a', marginBottom: '20px' }}>
-          <Check size={18} />
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center space-x-3 text-sm font-semibold">
+          <Check className="w-5 h-5 text-emerald-600 flex-shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {errorMsg && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#dc2626', marginBottom: '20px' }}>
-          <AlertCircle size={18} />
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl flex items-center space-x-3 text-sm font-semibold">
+          <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
           <span>{errorMsg}</span>
         </div>
       )}
 
-      {/* 7-Day Purge Action Card */}
-      {isSuperAdmin && (
-        <div className="card" style={{ background: '#fffbeb', border: '1px solid #fde68a', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+      {/* Main Entry Form */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Market Selection */}
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309', fontWeight: 700, fontSize: '0.95rem' }}>
-                <Database size={18} />
-                <span>7-Day Data Retention Cleaner</span>
-              </div>
-              <p style={{ fontSize: '0.84rem', color: '#78350f', marginTop: '4px' }}>
-                Delete all previous market price records recorded before <strong>{cutoffDateStr}</strong> while retaining the latest 7 days.
-              </p>
-            </div>
-            <button
-              onClick={handlePurgeOldRecords}
-              disabled={purging}
-              className="btn btn-danger"
-              style={{ padding: '10px 16px', fontSize: '0.88rem' }}
-            >
-              <Trash2 size={16} />
-              {purging ? 'Purging Old Records...' : 'Delete Records Older Than 7 Days'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Price Form Card */}
-      <div className="card">
-        <h2 className="card-title">Enter Today's Market Auction Rate</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Market</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                APMC Market Name *
+              </label>
               <select
-                className="form-select"
                 value={formData.market_name}
                 onChange={(e) => setFormData({ ...formData, market_name: e.target.value })}
                 required
-                disabled={profile?.role !== 'super_admin' && profile?.assigned_market !== 'all'}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               >
                 {markets.map((m) => (
                   <option key={m.id} value={m.name}>
@@ -299,195 +404,232 @@ export default function PriceEntryPage() {
               </select>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Breed Variety</label>
+            {/* Breed Selection */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Silk Breed Code *
+              </label>
               <select
-                className="form-select"
                 value={formData.breed}
                 onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
                 required
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               >
                 {breeds.length > 0 ? (
                   breeds.map((b) => (
-                    <option key={b.id} value={b.code}>
-                      {b.name} ({b.code})
+                    <option key={b.id || b.code} value={b.code}>
+                      {b.code} - {b.name}
                     </option>
                   ))
                 ) : (
                   <>
                     <option value="CB">Cross Breed (CB)</option>
                     <option value="BV">Bivoltine (BV)</option>
-                    <option value="CB_GOLD">CB Gold (CB_GOLD)</option>
+                    <option value="CB_GOLD">CB Gold</option>
                   </>
                 )}
               </select>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Quality Grade</label>
+            {/* Quality Grade */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Quality Grade
+              </label>
               <select
-                className="form-select"
                 value={formData.quality}
                 onChange={(e) => setFormData({ ...formData, quality: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               >
-                <option value="A">Grade A (Superior)</option>
-                <option value="B">Grade B (Medium)</option>
-                <option value="C">Grade C (Low)</option>
+                <option value="A">Grade A (Premium)</option>
+                <option value="B">Grade B (Standard)</option>
+                <option value="C">Grade C (Commercial)</option>
               </select>
             </div>
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Min Price (₹ / kg)</label>
+          {/* Pricing Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-5 rounded-xl border border-slate-100">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Minimum Price (₹/kg) *
+              </label>
               <input
                 type="number"
                 step="0.01"
-                className="form-input"
+                required
                 placeholder="e.g. 520"
                 value={formData.min_price}
                 onChange={(e) => handlePriceChange('min_price', e.target.value)}
-                required
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Max Price (₹ / kg)</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Maximum Price (₹/kg) *
+              </label>
               <input
                 type="number"
                 step="0.01"
-                className="form-input"
-                placeholder="e.g. 680"
+                required
+                placeholder="e.g. 780"
                 value={formData.max_price}
                 onChange={(e) => handlePriceChange('max_price', e.target.value)}
-                required
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Avg Price (₹ / kg)</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Average Price (₹/kg) *
+              </label>
               <input
                 type="number"
                 step="0.01"
-                className="form-input"
-                placeholder="e.g. 600"
+                required
+                placeholder="Calculated automatically"
                 value={formData.avg_price}
                 onChange={(e) => setFormData({ ...formData, avg_price: e.target.value })}
-                required
+                className="w-full px-4 py-3 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900 font-black text-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
               />
             </div>
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Lot Number (Optional)</label>
+          {/* Volume & Date Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Lot Number / Count
+              </label>
               <input
                 type="number"
-                className="form-input"
-                placeholder="e.g. 42"
+                placeholder="e.g. 145"
                 value={formData.lot_number}
                 onChange={(e) => setFormData({ ...formData, lot_number: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Total Weight in KG (Optional)</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Total Weight (Kg)
+              </label>
               <input
                 type="number"
-                step="0.1"
-                className="form-input"
+                step="0.01"
                 placeholder="e.g. 1250.5"
                 value={formData.total_weight}
                 onChange={(e) => setFormData({ ...formData, total_weight: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Report Date</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Report Date *
+              </label>
               <input
                 type="date"
-                className="form-input"
+                required
                 value={formData.report_date}
                 onChange={(e) => setFormData({ ...formData, report_date: e.target.value })}
-                required
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               />
             </div>
           </div>
 
-          <div style={{ marginBottom: '16px', padding: '10px 14px', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, color: '#1e40af' }}>
-              <input
-                type="checkbox"
-                checked={sendNotification}
-                onChange={(e) => setSendNotification(e.target.checked)}
-                style={{ width: '16px', height: '16px' }}
-              />
-              <span>Send Instant Push Notification to Farmers on Rate Publish</span>
-            </label>
+          {/* Push Broadcast Toggle */}
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+            <div>
+              <p className="text-sm font-bold text-slate-900">Broadcast Push Notification to Farmers</p>
+              <p className="text-xs text-slate-500">Send an instant alert to farmers subscribed to this APMC market.</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={sendNotification}
+              onChange={(e) => setSendNotification(e.target.checked)}
+              className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+            />
           </div>
 
           <button
             type="submit"
-            className="btn btn-primary"
             disabled={loading}
-            style={{ width: '100%', marginTop: '4px' }}
+            className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm uppercase tracking-wider rounded-xl transition duration-150 flex items-center justify-center space-x-2 shadow-sm disabled:opacity-50"
           >
-            <Save size={16} />
-            {loading ? 'Saving Daily Rate...' : 'Submit Cocoon Price Record'}
+            <Save className="w-5 h-5" />
+            <span>{loading ? 'Saving Auction Price...' : 'Publish Rate Entry'}</span>
           </button>
         </form>
       </div>
 
-      {/* Recent Records Table */}
-      <div className="card">
-        <h2 className="card-title">Recent Price Records ({recentPrices.length})</h2>
-        <div className="table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Market</th>
-                <th>Breed</th>
-                <th>Min (₹)</th>
-                <th>Avg (₹)</th>
-                <th>Max (₹)</th>
-                <th>Date</th>
-                {isSuperAdmin && <th>Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {recentPrices.length === 0 ? (
-                <tr>
-                  <td colSpan={isSuperAdmin ? 7 : 6} style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>
-                    No recent price records found.
-                  </td>
+      {/* Date-Wise Price Records Table */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <Clock className="w-4 h-4 text-slate-500" />
+            <h2 className="text-base font-bold text-slate-900">
+              Auction Records for: {selectedViewDate === 'all' ? 'All Dates' : selectedViewDate}
+            </h2>
+          </div>
+          <span className="text-xs font-bold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg">
+            {pricesForDate.length} entries
+          </span>
+        </div>
+
+        {pricesForDate.length === 0 ? (
+          <div className="text-center py-10 text-slate-400 font-medium text-sm">
+            No auction rate entries recorded for {selectedViewDate}.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50 text-xs uppercase font-bold text-slate-500">
+                  <th className="py-3 px-4">Market</th>
+                  <th className="py-3 px-4">Breed</th>
+                  <th className="py-3 px-4">Grade</th>
+                  <th className="py-3 px-4">Min (₹)</th>
+                  <th className="py-3 px-4">Max (₹)</th>
+                  <th className="py-3 px-4">Avg (₹/kg)</th>
+                  <th className="py-3 px-4">Lots</th>
+                  <th className="py-3 px-4">Date</th>
+                  {isSuperAdmin && <th className="py-3 px-4 text-right">Actions</th>}
                 </tr>
-              ) : (
-                recentPrices.map((p) => (
-                  <tr key={p.id}>
-                    <td style={{ fontWeight: 600 }}>{p.market_name}</td>
-                    <td><span className="badge badge-primary">{p.breed}</span></td>
-                    <td>₹{p.min_price}</td>
-                    <td style={{ fontWeight: 700, color: 'var(--primary)' }}>₹{p.avg_price}</td>
-                    <td>₹{p.max_price}</td>
-                    <td style={{ color: '#64748b' }}>{p.report_date}</td>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                {pricesForDate.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50 transition">
+                    <td className="py-3 px-4 font-bold text-slate-900">{item.market_name}</td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-bold text-xs">
+                        {item.breed}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">{item.quality || 'A'}</td>
+                    <td className="py-3 px-4">₹{item.min_price}</td>
+                    <td className="py-3 px-4">₹{item.max_price}</td>
+                    <td className="py-3 px-4 font-bold text-emerald-600">₹{item.avg_price}</td>
+                    <td className="py-3 px-4 text-slate-500">{item.lot_number || '-'}</td>
+                    <td className="py-3 px-4 text-slate-500 text-xs">{item.report_date}</td>
                     {isSuperAdmin && (
-                      <td>
+                      <td className="py-3 px-4 text-right">
                         <button
-                          className="btn btn-danger"
-                          style={{ padding: '4px 8px', fontSize: '0.78rem' }}
-                          onClick={() => handleDeleteSingle(p.id, p.market_name, p.report_date)}
-                          title="Delete record"
+                          onClick={() => handleDeletePrice(item.id, item.market_name, item.report_date)}
+                          className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition"
+                          title="Delete entry"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </td>
                     )}
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
