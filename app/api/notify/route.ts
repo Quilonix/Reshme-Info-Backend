@@ -51,12 +51,18 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabaseServer.auth.getUser();
 
     let isAuthorized = !!user;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
     if (!isAuthorized) {
       const authHeader = request.headers.get('authorization');
       if (authHeader?.startsWith('Bearer ')) {
         const token = authHeader.substring(7);
-        const { data: userFromToken } = await supabaseServer.auth.getUser(token);
-        isAuthorized = !!userFromToken?.user;
+        if (serviceRoleKey && token === serviceRoleKey) {
+          isAuthorized = true;
+        } else {
+          const { data: userFromToken } = await supabaseServer.auth.getUser(token);
+          isAuthorized = !!userFromToken?.user;
+        }
       }
     }
 
@@ -65,9 +71,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, message, priority = 'medium', targetAudience = 'all', targetMarket, imageUrl } = body;
+    const { title, message, body: bodyMessage, priority = 'medium', targetAudience = 'all', targetMarket, imageUrl } = body;
+    const notificationMessage = message || bodyMessage;
 
-    if (!title || !message) {
+    if (!title || !notificationMessage) {
       return NextResponse.json({ error: 'Title and Message are required.' }, { status: 400 });
     }
 
@@ -85,7 +92,7 @@ export async function POST(request: NextRequest) {
       .from('notifications')
       .insert({
         title,
-        message,
+        message: notificationMessage,
         priority,
         target_audience: targetAudience,
         target_market: targetMarket,
