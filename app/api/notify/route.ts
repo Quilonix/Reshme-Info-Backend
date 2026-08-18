@@ -127,22 +127,43 @@ export async function POST(request: NextRequest) {
 
       // A. Send to Topic broadcast (reaches ALL subscribed app devices)
       try {
-        const topicName = targetMarket && targetMarket !== 'all' ? `market_${targetMarket.replace(/\s+/g, '_')}` : 'all';
-        await messaging.send({
-          topic: topicName,
-          notification: {
-            title,
-            body: message,
-            imageUrl: imageUrl || undefined,
-          },
-          data: {
-            priority,
-            targetAudience,
-            targetMarket: targetMarket || '',
-            notificationId: record?.id || '',
-          },
-        });
-        topicSent = true;
+        const topicsToBroadcast = ['all'];
+        if (targetMarket && targetMarket !== 'all') {
+          topicsToBroadcast.push(`market_${targetMarket.replace(/\s+/g, '_')}`);
+        }
+
+        for (const topicName of topicsToBroadcast) {
+          try {
+            await messaging.send({
+              topic: topicName,
+              notification: {
+                title,
+                body: notificationMessage,
+                imageUrl: imageUrl || undefined,
+              },
+              android: {
+                priority: 'high',
+                notification: {
+                  channelId: 'reshme_channel',
+                  sound: 'default',
+                  priority: 'high',
+                  defaultSound: true,
+                  defaultVibrateTimings: true,
+                },
+              },
+              data: {
+                priority,
+                targetAudience,
+                targetMarket: targetMarket || '',
+                notificationId: record?.id || '',
+                click_action: 'FLUTTER_NOTIFICATION_CLICK',
+              },
+            });
+            topicSent = true;
+          } catch (tErr) {
+            console.warn(`Topic ${topicName} broadcast note:`, tErr);
+          }
+        }
       } catch (topicErr) {
         console.warn('Topic broadcast note:', topicErr);
       }
@@ -156,14 +177,25 @@ export async function POST(request: NextRequest) {
             tokens: batchTokens,
             notification: {
               title,
-              body: message,
+              body: notificationMessage,
               imageUrl: imageUrl || undefined,
+            },
+            android: {
+              priority: 'high',
+              notification: {
+                channelId: 'reshme_channel',
+                sound: 'default',
+                priority: 'high',
+                defaultSound: true,
+                defaultVibrateTimings: true,
+              },
             },
             data: {
               priority,
               targetAudience,
               targetMarket: targetMarket || '',
               notificationId: record?.id || '',
+              click_action: 'FLUTTER_NOTIFICATION_CLICK',
             },
           });
           multicastSuccessCount += response.successCount;
@@ -182,9 +214,10 @@ export async function POST(request: NextRequest) {
           registration_ids: tokens,
           notification: {
             title,
-            body: message,
+            body: notificationMessage,
             image: imageUrl || undefined,
             sound: 'default',
+            android_channel_id: 'reshme_channel',
           },
           data: {
             priority,
