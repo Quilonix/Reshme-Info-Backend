@@ -112,6 +112,7 @@ export default function AIExtractorPage() {
         lot_number: item.lot_number ? parseInt(item.lot_number as any) : null,
         total_weight: item.total_weight ? parseFloat(item.total_weight as any) : null,
         report_date: item.report_date,
+        source: 'ai_extractor',
       }));
 
       const { error } = await supabase.from('cocoon_prices').insert(recordsToInsert);

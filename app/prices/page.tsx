@@ -174,6 +174,7 @@ export default function PriceEntryPage() {
         lot_number: formData.lot_number ? parseInt(formData.lot_number) : null,
         total_weight: formData.total_weight ? parseFloat(formData.total_weight) : null,
         report_date: formData.report_date,
+        source: 'manual',
         created_by: user?.id,
       };
 
@@ -574,6 +575,7 @@ export default function PriceEntryPage() {
                   <th style={{ padding: '12px 14px' }}>Max (₹)</th>
                   <th style={{ padding: '12px 14px' }}>Avg (₹/kg)</th>
                   <th style={{ padding: '12px 14px' }}>Lots</th>
+                  <th style={{ padding: '12px 14px' }}>Source</th>
                   <th style={{ padding: '12px 14px' }}>Date</th>
                   {isSuperAdmin && <th style={{ padding: '12px 14px', textAlign: 'right' }}>Actions</th>}
                 </tr>
@@ -592,6 +594,21 @@ export default function PriceEntryPage() {
                     <td style={{ padding: '12px 14px' }}>₹{item.max_price}</td>
                     <td style={{ padding: '12px 14px', fontWeight: 900, color: 'var(--success)', fontSize: '0.98rem' }}>₹{item.avg_price}</td>
                     <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{item.lot_number || '-'}</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      {item.source === 'wa_automation' ? (
+                        <span style={{ padding: '3px 8px', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                          WA Auto
+                        </span>
+                      ) : item.source === 'ai_extractor' ? (
+                        <span style={{ padding: '3px 8px', background: '#faf5ff', color: '#9333ea', border: '1px solid #e9d5ff', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                          AI Extractor
+                        </span>
+                      ) : (
+                        <span style={{ padding: '3px 8px', background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                          Admin Manual
+                        </span>
+                      )}
+                    </td>
                     <td style={{ padding: '12px 14px', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{item.report_date}</td>
                     {isSuperAdmin && (
                       <td style={{ padding: '12px 14px', textAlign: 'right' }}>
